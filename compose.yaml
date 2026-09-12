@@ -1,0 +1,16 @@
+services:
+  monitor:
+    build: .
+    restart: unless-stopped
+    environment:
+      CRON_SCHEDULE: "*/30 * * * *"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+  bot:
+    build: .
+    restart: unless-stopped
+    entrypoint: ["python", "bot.py"]
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data

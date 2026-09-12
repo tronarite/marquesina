@@ -1,0 +1,7 @@
+{
+  "telegram_bot_token": "",
+  "admin_chat_id": "",
+  "cine_url": "https://cineciudad.com/cine.php?id=TU_ID_DE_CINE",
+  "cine_name": "Tu cine",
+  "last_chance_days": 3
+}
