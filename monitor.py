@@ -115,6 +115,16 @@ def save_window_history(history: dict[str, dict]) -> None:
     WINDOW_HISTORY_PATH.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def movies_now_showing(movies: list[dict], previous_movies: dict[str, dict]) -> list[dict]:
+    """Peliculas ya conocidas que estaban en venta anticipada y acaban de pasar a cartelera normal."""
+    return [
+        m for m in movies
+        if m["title"] in previous_movies
+        and previous_movies[m["title"]].get("advance_sale")
+        and not m["advance_sale"]
+    ]
+
+
 def remaining_days(movie: dict) -> int | None:
     last_show_date = movie.get("last_show_date")
     if not last_show_date:
@@ -289,12 +299,7 @@ def main() -> None:
         return
 
     new_movies = [m for m in movies if m["title"] not in previous_movies]
-    now_showing = [
-        m for m in movies
-        if m["title"] in previous_movies
-        and previous_movies[m["title"]].get("advance_sale")
-        and not m["advance_sale"]
-    ]
+    now_showing = movies_now_showing(movies, previous_movies)
 
     if new_movies or now_showing:
         for movie in now_showing:

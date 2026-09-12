@@ -76,6 +76,20 @@ def test_check_closing_soon_only_evaluates_once_per_day():
     assert monitor.check_closing_soon(movie, history, today, 3) is False
 
 
+def test_movies_now_showing_detects_presale_transition():
+    previous_movies = {
+        "DUNE": {"title": "DUNE", "advance_sale": True},
+        "SPIDER-MAN": {"title": "SPIDER-MAN", "advance_sale": False},
+    }
+    movies = [
+        {"title": "DUNE", "advance_sale": False},
+        {"title": "SPIDER-MAN", "advance_sale": False},
+        {"title": "PELI NUEVA", "advance_sale": False},
+    ]
+    result = monitor.movies_now_showing(movies, previous_movies)
+    assert [m["title"] for m in result] == ["DUNE"]
+
+
 def test_subscribers_roundtrip():
     original = monitor.SUBSCRIBERS_PATH
     with TemporaryDirectory() as directory:
@@ -96,5 +110,6 @@ if __name__ == "__main__":
     test_check_closing_soon_ignores_advancing_window()
     test_check_closing_soon_fires_when_window_stalls_near_the_end()
     test_check_closing_soon_only_evaluates_once_per_day()
+    test_movies_now_showing_detects_presale_transition()
     test_subscribers_roundtrip()
     print("ok")
