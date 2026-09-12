@@ -25,7 +25,7 @@ señal real de que la película se va.
 Esta instancia oficial vigila **Marina Cinemas 7 (Ceuta)**. Solo tienes que
 hablarle al bot:
 
-👉 **[@cineciudad_notif_bot](https://t.me/cineciudad_notif_bot)**
+👉 **[@marquesina_ceuta_bot](https://t.me/marquesina_ceuta_bot)**
 
 - `/start` — empieza a seguirlo
 - `/stop` — deja de seguirlo
