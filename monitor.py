@@ -289,8 +289,20 @@ def main() -> None:
         return
 
     new_movies = [m for m in movies if m["title"] not in previous_movies]
+    now_showing = [
+        m for m in movies
+        if m["title"] in previous_movies
+        and previous_movies[m["title"]].get("advance_sale")
+        and not m["advance_sale"]
+    ]
 
-    if new_movies:
+    if new_movies or now_showing:
+        for movie in now_showing:
+            try:
+                notify_new_movie(config, movie)
+                log(f"Notificado estreno tras preventa: {movie['title']}")
+            except Exception as exc:
+                log(f"Error al notificar '{movie['title']}': {exc}")
         for movie in new_movies:
             try:
                 if movie["advance_sale"]:

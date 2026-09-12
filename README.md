@@ -8,7 +8,7 @@ estándar.
 
 | | Evento |
 |---|---|
-| 🆕 | Entra una película nueva en cartelera |
+| 🆕 | Entra una película nueva en cartelera (incluida una que termina su venta anticipada) |
 | 🎟️ | Se abre la venta anticipada de un estreno |
 | ⭐ | Hay una función única, programada para un solo día |
 | ⏳ | A una película le quedan pocos días en cartelera |
