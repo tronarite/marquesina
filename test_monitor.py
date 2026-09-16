@@ -42,38 +42,58 @@ def test_parse_movies_flags_advance_sale_and_day_count():
     assert by_title["PELI NORMAL"]["day_count"] == 4
 
 
-def test_check_closing_soon_waits_for_a_baseline():
-    history = {}
-    movie = {"title": "A", "last_show_date": "2099-01-01"}
-    assert monitor.check_closing_soon(movie, history, "2099-01-01", 3) is False
-    assert "A" in history
-
-
-def test_check_closing_soon_ignores_advancing_window():
+def test_find_closing_soon_ignores_a_catalog_wide_batch_stall():
+    # Regresion: CineCiudad publica las sesiones por lotes. Cuando el lote
+    # no se actualiza, TODA la cartelera comparte la misma ultima fecha
+    # visible, cercana a hoy. Eso no significa que todas terminen: nadie
+    # deberia avisarse porque nadie se queda corta frente al resto.
     import datetime
 
-    today = datetime.date.today().isoformat()
-    tomorrow = (datetime.date.today() + datetime.timedelta(days=10)).isoformat()
-    history = {"A": {"date": "2000-01-01", "last_show_date": today}}
-    movie = {"title": "A", "last_show_date": tomorrow}
-    assert monitor.check_closing_soon(movie, history, today, 3) is False
+    soon = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    movies = [
+        {"title": "A", "last_show_date": soon, "advance_sale": False},
+        {"title": "B", "last_show_date": soon, "advance_sale": False},
+        {"title": "C", "last_show_date": soon, "advance_sale": False},
+    ]
+    assert monitor.find_closing_soon(movies, 3) == []
 
 
-def test_check_closing_soon_fires_when_window_stalls_near_the_end():
+def test_find_closing_soon_flags_the_movie_that_falls_behind_the_pack():
     import datetime
 
-    today = datetime.date.today().isoformat()
+    ceiling = (datetime.date.today() + datetime.timedelta(days=8)).isoformat()
     soon = (datetime.date.today() + datetime.timedelta(days=2)).isoformat()
-    history = {"A": {"date": "2000-01-01", "last_show_date": soon}}
-    movie = {"title": "A", "last_show_date": soon}
-    assert monitor.check_closing_soon(movie, history, today, 3) is True
+    movies = [
+        {"title": "SIGUE 1", "last_show_date": ceiling, "advance_sale": False},
+        {"title": "SIGUE 2", "last_show_date": ceiling, "advance_sale": False},
+        {"title": "SE VA", "last_show_date": soon, "advance_sale": False},
+    ]
+    result = monitor.find_closing_soon(movies, 3)
+    assert [m["title"] for m in result] == ["SE VA"]
 
 
-def test_check_closing_soon_only_evaluates_once_per_day():
-    today = __import__("datetime").date.today().isoformat()
-    history = {"A": {"date": today, "last_show_date": "2000-01-01"}}
-    movie = {"title": "A", "last_show_date": "2099-01-01"}
-    assert monitor.check_closing_soon(movie, history, today, 3) is False
+def test_find_closing_soon_waits_until_within_the_threshold():
+    import datetime
+
+    ceiling = (datetime.date.today() + datetime.timedelta(days=20)).isoformat()
+    far = (datetime.date.today() + datetime.timedelta(days=10)).isoformat()
+    movies = [
+        {"title": "SIGUE", "last_show_date": ceiling, "advance_sale": False},
+        {"title": "TERMINA LEJOS", "last_show_date": far, "advance_sale": False},
+    ]
+    assert monitor.find_closing_soon(movies, 3) == []
+
+
+def test_find_closing_soon_ignores_advance_sale_movies():
+    import datetime
+
+    ceiling = (datetime.date.today() + datetime.timedelta(days=8)).isoformat()
+    soon = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    movies = [
+        {"title": "SIGUE", "last_show_date": ceiling, "advance_sale": False},
+        {"title": "PREVENTA", "last_show_date": soon, "advance_sale": True},
+    ]
+    assert monitor.find_closing_soon(movies, 3) == []
 
 
 def test_movies_now_showing_detects_presale_transition():
@@ -106,10 +126,10 @@ def test_subscribers_roundtrip():
 if __name__ == "__main__":
     test_load_config_requires_cine_url()
     test_parse_movies_flags_advance_sale_and_day_count()
-    test_check_closing_soon_waits_for_a_baseline()
-    test_check_closing_soon_ignores_advancing_window()
-    test_check_closing_soon_fires_when_window_stalls_near_the_end()
-    test_check_closing_soon_only_evaluates_once_per_day()
+    test_find_closing_soon_ignores_a_catalog_wide_batch_stall()
+    test_find_closing_soon_flags_the_movie_that_falls_behind_the_pack()
+    test_find_closing_soon_waits_until_within_the_threshold()
+    test_find_closing_soon_ignores_advance_sale_movies()
     test_movies_now_showing_detects_presale_transition()
     test_subscribers_roundtrip()
     print("ok")

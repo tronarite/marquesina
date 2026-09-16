@@ -6,6 +6,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
@@ -13,7 +14,6 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 STATE_PATH = BASE_DIR / "data" / "seen_movies.json"
 LAST_CHANCE_PATH = BASE_DIR / "data" / "last_chance_alerts.json"
-WINDOW_HISTORY_PATH = BASE_DIR / "data" / "window_history.json"
 SUBSCRIBERS_PATH = BASE_DIR / "data" / "subscribers.json"
 
 USER_AGENT = (
@@ -104,17 +104,6 @@ def save_last_chance_alerts(alerts: dict[str, str]) -> None:
     LAST_CHANCE_PATH.write_text(json.dumps(alerts, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def load_window_history() -> dict[str, dict]:
-    if not WINDOW_HISTORY_PATH.exists():
-        return {}
-    return json.loads(WINDOW_HISTORY_PATH.read_text(encoding="utf-8"))
-
-
-def save_window_history(history: dict[str, dict]) -> None:
-    WINDOW_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    WINDOW_HISTORY_PATH.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def movies_now_showing(movies: list[dict], previous_movies: dict[str, dict]) -> list[dict]:
     """Peliculas ya conocidas que estaban en venta anticipada y acaban de pasar a cartelera normal."""
     return [
@@ -132,33 +121,32 @@ def remaining_days(movie: dict) -> int | None:
     return (date.fromisoformat(last_show_date) - date.today()).days
 
 
-def check_closing_soon(movie: dict, history: dict[str, dict], today_iso: str, last_chance_days: int) -> bool:
-    """Detecta el cierre real de una pelicula: la ventana de fechas visible deja de avanzar.
+def find_closing_soon(movies: list[dict], last_chance_days: int) -> list[dict]:
+    """Detecta las peliculas que terminan antes que el resto de la cartelera.
 
-    La web siempre muestra una ventana movil de varios dias de sesiones, asi que la
-    ultima fecha visible esta casi siempre a pocos dias de hoy. Un umbral fijo sobre esa
-    fecha dispararia el aviso para practicamente cualquier pelicula activa. En vez de eso,
-    comparamos la ultima fecha visible de un dia para otro: si no avanzo, esa es realmente
-    la ultima fecha de proyeccion.
+    CineCiudad publica las sesiones por lotes, no dia a dia: la ultima fecha
+    visible de la mayoria de peliculas se mueve a la vez (o se queda quieta
+    varios dias seguidos) segun cuando se publique el siguiente lote. Por eso
+    no sirve comparar la fecha de una pelicula contra si misma de un dia para
+    otro (un lote sin publicar haria saltar el aviso para toda la cartelera a
+    la vez). En su lugar, comparamos cada pelicula contra las demas: casi
+    todas comparten la misma ultima fecha (el techo del lote actual); una
+    pelicula que se queda corta frente a ese techo es la que de verdad
+    termina antes.
     """
-    title = movie["title"]
-    last_show_date = movie.get("last_show_date")
-    if not last_show_date:
-        return False
+    candidates = [m for m in movies if m.get("last_show_date") and not m["advance_sale"]]
+    if len(candidates) < 2:
+        return []
 
-    entry = history.get(title)
-    should_alert = False
-    if entry is None:
-        should_alert = False
-    elif entry["date"] < today_iso:
-        remaining = remaining_days(movie)
-        stagnant = last_show_date <= entry["last_show_date"]
-        should_alert = stagnant and remaining is not None and 0 <= remaining <= last_chance_days
+    ceiling = Counter(m["last_show_date"] for m in candidates).most_common(1)[0][0]
 
-    if entry is None or entry["date"] < today_iso:
-        history[title] = {"date": today_iso, "last_show_date": last_show_date}
-
-    return should_alert
+    closing = []
+    for movie in candidates:
+        if movie["last_show_date"] < ceiling:
+            remaining = remaining_days(movie)
+            if remaining is not None and 0 <= remaining <= last_chance_days:
+                closing.append(movie)
+    return closing
 
 
 def load_subscribers() -> list[str]:
@@ -324,22 +312,18 @@ def main() -> None:
     else:
         log(f"Sin cambios ({len(movies)} peliculas en cartelera).")
 
-    today_iso = date.today().isoformat()
     titles = {m["title"] for m in movies}
-    window_history = {t: h for t, h in load_window_history().items() if t in titles}
     last_chance_alerts = {t: d for t, d in load_last_chance_alerts().items() if t in titles}
 
-    for movie in movies:
-        if check_closing_soon(movie, window_history, today_iso, config.get("last_chance_days", 3)):
-            if last_chance_alerts.get(movie["title"]) != movie["last_show_date"]:
-                try:
-                    notify_last_chance(config, movie)
-                    last_chance_alerts[movie["title"]] = movie["last_show_date"]
-                    log(f"Aviso de ultimos dias: {movie['title']}")
-                except Exception as exc:
-                    log(f"Error al avisar ultimos dias de '{movie['title']}': {exc}")
+    for movie in find_closing_soon(movies, config.get("last_chance_days", 3)):
+        if last_chance_alerts.get(movie["title"]) != movie["last_show_date"]:
+            try:
+                notify_last_chance(config, movie)
+                last_chance_alerts[movie["title"]] = movie["last_show_date"]
+                log(f"Aviso de ultimos dias: {movie['title']}")
+            except Exception as exc:
+                log(f"Error al avisar ultimos dias de '{movie['title']}': {exc}")
 
-    save_window_history(window_history)
     save_last_chance_alerts(last_chance_alerts)
     save_state(movies)
 
