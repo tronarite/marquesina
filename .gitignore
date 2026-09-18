@@ -1,4 +1,6 @@
 config.json
 data/
+dockerconfig/
+deploy.bat
 __pycache__/
 *.pyc
