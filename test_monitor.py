@@ -139,6 +139,24 @@ class _FakeResponse:
         return self._body
 
 
+def test_write_json_retries_on_transient_permission_error():
+    original_write_text = Path.write_text
+    calls = {"n": 0}
+
+    def fake_write_text(self, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise PermissionError("locked")
+        return original_write_text(self, *args, **kwargs)
+
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "out.json"
+        with patch("monitor.Path.write_text", fake_write_text), patch("monitor.time.sleep"):
+            monitor.write_json(path, {"a": 1})
+        assert calls["n"] == 2
+        assert path.read_text(encoding="utf-8") == '{\n  "a": 1\n}'
+
+
 def test_subscribers_roundtrip():
     original = monitor.SUBSCRIBERS_PATH
     with TemporaryDirectory() as directory:
@@ -161,5 +179,6 @@ if __name__ == "__main__":
     test_find_closing_soon_ignores_advance_sale_movies()
     test_movies_now_showing_detects_presale_transition()
     test_fetch_html_retries_on_transient_error_then_succeeds()
+    test_write_json_retries_on_transient_permission_error()
     test_subscribers_roundtrip()
     print("ok")

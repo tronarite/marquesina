@@ -95,9 +95,24 @@ def load_previous_movies() -> dict[str, dict] | None:
     return {m["title"]: m for m in movies}
 
 
+def write_json(path: Path, data, retries: int = 5, backoff: float = 1.0) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(data, ensure_ascii=False, indent=2)
+    for attempt in range(retries):
+        try:
+            path.write_text(text, encoding="utf-8")
+            return
+        except PermissionError:
+            # ponytail: bind mount en Windows (antivirus/indexador bloquea el
+            # archivo un instante tras escribirlo); reintento corto, subir a
+            # cola/lock si esto se vuelve mas frecuente que un caso aislado.
+            if attempt == retries - 1:
+                raise
+            time.sleep(backoff * (attempt + 1))
+
+
 def save_state(movies: list[dict]) -> None:
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps(movies, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json(STATE_PATH, movies)
 
 
 def load_last_chance_alerts() -> dict[str, str]:
@@ -107,8 +122,7 @@ def load_last_chance_alerts() -> dict[str, str]:
 
 
 def save_last_chance_alerts(alerts: dict[str, str]) -> None:
-    LAST_CHANCE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LAST_CHANCE_PATH.write_text(json.dumps(alerts, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json(LAST_CHANCE_PATH, alerts)
 
 
 def movies_now_showing(movies: list[dict], previous_movies: dict[str, dict]) -> list[dict]:
@@ -163,8 +177,7 @@ def load_subscribers() -> list[str]:
 
 
 def save_subscribers(subscribers: list[str]) -> None:
-    SUBSCRIBERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SUBSCRIBERS_PATH.write_text(json.dumps(subscribers, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_json(SUBSCRIBERS_PATH, subscribers)
 
 
 def add_subscriber(chat_id) -> bool:
