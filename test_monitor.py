@@ -1,6 +1,8 @@
+import urllib.error
 import monitor
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 
 def test_load_config_requires_cine_url(tmp_path=None):
@@ -110,6 +112,33 @@ def test_movies_now_showing_detects_presale_transition():
     assert [m["title"] for m in result] == ["DUNE"]
 
 
+def test_fetch_html_retries_on_transient_error_then_succeeds():
+    responses = [urllib.error.HTTPError("url", 521, "Web Server Is Down", None, None), "<html>ok</html>"]
+
+    def fake_urlopen(request, timeout=None):
+        result = responses.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return _FakeResponse(result)
+
+    with patch("monitor.urllib.request.urlopen", side_effect=fake_urlopen), patch("monitor.time.sleep"):
+        assert monitor.fetch_html("https://example.com") == "<html>ok</html>"
+
+
+class _FakeResponse:
+    def __init__(self, body):
+        self._body = body.encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self._body
+
+
 def test_subscribers_roundtrip():
     original = monitor.SUBSCRIBERS_PATH
     with TemporaryDirectory() as directory:
@@ -131,5 +160,6 @@ if __name__ == "__main__":
     test_find_closing_soon_waits_until_within_the_threshold()
     test_find_closing_soon_ignores_advance_sale_movies()
     test_movies_now_showing_detects_presale_transition()
+    test_fetch_html_retries_on_transient_error_then_succeeds()
     test_subscribers_roundtrip()
     print("ok")

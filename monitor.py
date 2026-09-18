@@ -4,6 +4,7 @@
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -54,10 +55,16 @@ def cinema_name(config: dict) -> str:
     return config.get("cine_name") or "tu cine"
 
 
-def fetch_html(url: str) -> str:
+def fetch_html(url: str, retries: int = 3, backoff: float = 5.0) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8", errors="replace")
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return response.read().decode("utf-8", errors="replace")
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == retries - 1:
+                raise
+            time.sleep(backoff * (attempt + 1))
 
 
 def parse_movies(html: str) -> list[dict]:
